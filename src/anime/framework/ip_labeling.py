@@ -1,3 +1,10 @@
+__author__ = "Ali Kheradmand"
+__email__ =  "kheradm2@illinois.edu"
+
+"""
+    Various labeling designs for IP feature
+"""
+
 from labeling import Labeling, Spec, inf
 import netaddr
 

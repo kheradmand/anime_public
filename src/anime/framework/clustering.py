@@ -1,3 +1,11 @@
+__author__ = "Ali Kheradmand"
+__email__ =  "kheradm2@illinois.edu"
+
+"""
+    Various clustering algorithms
+"""
+
+
 import math
 import time
 import random
@@ -5,7 +13,6 @@ import heapq
 
 class Clustering(object):
     pass
-
 
 plot = False
 class GreedyCostBasedClustering(Clustering):
@@ -159,6 +166,8 @@ class GreedyCostBasedClustering(Clustering):
         return [self.clusters[c] for c in remaining_clusters]
 
 
+
+# depricated
 class MDSClustering(Clustering):
     def __init__(self, cluster_count):
         self.cluster_count = cluster_count

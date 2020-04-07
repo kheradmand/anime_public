@@ -1,3 +1,10 @@
+__author__ = "Ali Kheradmand"
+__email__ =  "kheradm2@illinois.edu"
+
+"""
+    Various types of labeling
+"""
+
 import collections
 import json
 
@@ -6,8 +13,9 @@ inf = 1e100
 Spec = collections.namedtuple('Spec', ['cost', 'value'])
 
 class Labeling(object):
-    # join returns Spec(cost, joined label)
+
     def join(self, l1, l2):
+        # return: Spec(cost, joined label)
         assert False
 
     def join(self,s):

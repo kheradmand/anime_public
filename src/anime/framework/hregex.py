@@ -1,3 +1,10 @@
+__author__ = "Ali Kheradmand"
+__email__ =  "kheradm2@illinois.edu"
+
+"""
+    Implementation of Hierarchical Regular Expressions (HRE)
+"""
+
 from heapq import *
 from labeling import Labeling, Spec, inf
 
