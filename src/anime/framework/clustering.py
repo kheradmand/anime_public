@@ -10,37 +10,48 @@ import math
 import time
 import random
 import heapq
+import logging
 
 class Clustering(object):
     pass
 
 plot = False
+
+
 class GreedyCostBasedClustering(Clustering):
-    def __init__(self, cluster_count):
+    def __init__(self, cluster_count=1, batch_size=0):
         self.cluster_count = cluster_count
+        self.batch_size = batch_size
+
         self.clusters = []
         self.parents = []
+        self.stats = []
 
-    def cluster(self, flows, feature, b = 1000, callback = None):
+    def cluster(self, flows, feature, callback=None):
         flow_labeling = feature.labeling
 
-        if b == 0:
-            b = len(flows)
+        batch_size = self.batch_size
+        if batch_size == 0:
+            batch_size = len(flows)
 
         self.clusters = [flow_labeling.join(flow, flow) for flow in flows]
         self.parents = range(len(self.clusters))
-        print "added initial clusters"
+
+        logging.debug("Initial clusters added")
+
         heap = []
         overall_cost = sum([c.cost for c in self.clusters])
 
         start = time.time()
 
+        # initial distances
         for i in range(len(self.clusters)):
-            print i
-            if len(self.clusters) - i <= b:
+            logging.debug("Adding distances for cluster %s", i)
+
+            if len(self.clusters) - i <= batch_size:
                 batch = range(i + 1, len(self.clusters))
             else:
-                batch = [random.randint(i+1,len(self.clusters)-1) for x in range(b)]
+                batch = [random.randint(i+1,len(self.clusters)-1) for x in range(batch_size)]
 
             for j in batch:
                 spec = flow_labeling.join(self.clusters[i].value, self.clusters[j].value)
@@ -49,15 +60,15 @@ class GreedyCostBasedClustering(Clustering):
 
         remaining_clusters = set(range(len(flows)))
 
-        res = []
-        res.append((len(remaining_clusters), overall_cost, time.time() - start))
-        print "--->", res[-1]
+        self.stats = []
+        self.stats.append((len(remaining_clusters), overall_cost, time.time() - start))
+        logging.debug(self.stats[-1])
 
         if callback:
             callback(self, remaining_clusters)
 
         while len(remaining_clusters) > self.cluster_count:
-            print "number of clusters so far", len(remaining_clusters)
+            logging.debug("Number of clusters so far %s", len(remaining_clusters))
 
             best = None
             while True:
@@ -74,10 +85,9 @@ class GreedyCostBasedClustering(Clustering):
             best_clusters_to_merge = best[2]
             best_new_cluster = best[1]
             best_delta = best[0]
-            print "final best delta is ", best_delta, best_new_cluster, \
-                  "with cluster id ", new_cluster_id, " by merging ", \
-                  best_clusters_to_merge, \
-                  self.clusters[best_clusters_to_merge[0]], self.clusters[best_clusters_to_merge[1]]
+            logging.debug("Final best delta is %s %s with cluster id %s by merging %s %s %s",
+                         best_delta, best_new_cluster, new_cluster_id, best_clusters_to_merge,
+                         self.clusters[best_clusters_to_merge[0]], self.clusters[best_clusters_to_merge[1]])
 
             overall_cost += best_delta
 
@@ -93,7 +103,9 @@ class GreedyCostBasedClustering(Clustering):
 
             while True:
                 subsumed = set()
-                if len(remaining_clusters) <= b:
+
+                # choosing the batch to go through
+                if len(remaining_clusters) <= batch_size:
                     # just go through everything
                     batch = remaining_clusters
                 else:
@@ -101,13 +113,15 @@ class GreedyCostBasedClustering(Clustering):
                     batch = set()
 
                     # choosing the more efficient way of sampling:
-                    if (float(len(self.clusters)) / len(remaining_clusters)) * b < len(remaining_clusters):
-                        while len(batch) < b:
+                    if (float(len(self.clusters)) / len(remaining_clusters)) * batch_size < len(remaining_clusters):
+                        while len(batch) < batch_size:
                             r = random.randint(0,len(self.clusters)-1)
                             if r in remaining_clusters:
                                 batch.add(r)
                     else:
-                        batch = set(random.sample(remaining_clusters, b))
+                        batch = set(random.sample(remaining_clusters, batch_size))
+
+                # now going through the batch
                 for c in batch:
                     if flow_labeling.subset(self.clusters[c].value, self.clusters[new_cluster_id].value):
                         subsumed.add(c)
@@ -120,50 +134,57 @@ class GreedyCostBasedClustering(Clustering):
                         delta = spec.cost - self.clusters[c].cost - self.clusters[new_cluster_id].cost
                         heapq.heappush(heap, (delta, spec, (c, new_cluster_id)))
 
+                # remove subsumed clusters
                 remaining_clusters -= subsumed
                 for c in subsumed:
                     self.parents[c] = new_cluster_id
-                if b >= len(remaining_clusters) + len(subsumed) or len(subsumed) < len(batch):
+
+                if batch_size >= len(remaining_clusters) + len(subsumed) or len(subsumed) < len(batch):
                     break
                 else:
-                    print "all batch subsumed, using new batch"
+                    logging.warning("All batch subsumed, using new batch")
+
             remaining_clusters.add(new_cluster_id)
 
-            if b == len(flows):
+            if batch_size == len(flows):
                 pass
                 #assert(cost_sanity_check - overall_cost < 1e-10)
-            print "cumulative cost is", overall_cost
-            res.append((len(remaining_clusters), overall_cost, time.time()-start))
-            print "--->", res[-1]
+
+            self.stats.append((len(remaining_clusters), overall_cost, time.time() - start))
+            logging.debug("Cumulative cost is %s", overall_cost)
+            logging.debug(self.stats[-1])
 
             if callback:
                 callback(self, remaining_clusters)
 
-        print "final clusters"
-        for c in remaining_clusters:
-            print self.clusters[c]
+        # clustering is done
+        logging.info("Clustering is finished")
+        logging.info(">time %s", str(time.time()-start))
 
-        print ">time", time.time()-start
+        # self.store_stats()
+        if plot:
+            self.plot_stats(sum((x.cost for x in self.clusters[:len(flows)])))
 
-        with open("result.csv",'w') as f:
-            f.write("k,score,time\n")
-            for r in res:
-                f.write(",".join(map(str, list(r)))+"\n")
+        return [self.clusters[c] for c in remaining_clusters]
 
+    def plot_stats(self, tp):
         if plot:
             import matplotlib.pyplot as plt
             #plt.plot([x[0] for x in res], [x[1] for x in res])
             #plt.plot([x[0] for x in res], [math.log(x[1]) for x in res], '--bo')
-            plt.plot([x[0] for x in res], [float(len(flows)) / x[1] for x in res], '--bo')
+            plt.plot([x[0] for x in self.stats], [float(tp) / x[1] for x in self.stats], '--bo')
             plt.title("cost")
             plt.show()
 
-            plt.plot([x[0] for x in res], [x[2] for x in res], '--bo')
+            plt.plot([x[0] for x in self.stats], [x[2] for x in self.stats], '--bo')
             plt.title("time")
             plt.show()
 
-
-        return [self.clusters[c] for c in remaining_clusters]
+    def store_stats(self, file_name = "stats.csv"):
+        with open(file_name,'w') as f:
+            f.write("k,score,time\n")
+            for r in self.stats:
+                f.write(",".join(map(str, list(r)))+"\n")
 
 
 

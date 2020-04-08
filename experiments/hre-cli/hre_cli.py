@@ -6,11 +6,14 @@ __email__ =  "kheradm2@illinois.edu"
 import argparse
 import sys
 import random
+import logging
 sys.path.append('../../src/')
 from anime.framework.clustering import *
 from anime.framework.hregex import *
 from anime.framework.ip_labeling import *
 from anime.framework.labeling import *
+
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--labeling', '-l', help='path to labeling json file', type=str, default="labeling.json")
@@ -24,8 +27,6 @@ random.seed(parsed_args.seed)
 
 print ">clusters", parsed_args.clusters
 print ">batch", parsed_args.batch
-
-labeling = HierarchicalLabeling.load_from_file(parsed_args.labeling)
 
 flows = []
 
@@ -45,7 +46,8 @@ for l in sys.stdin:
 
 print "d is", d
 
-pathFeature = Feature("path", HRegexLabeling(labeling, d))
+device_labeling = HierarchicalLabeling.load_from_file(parsed_args.labeling)
+pathFeature = Feature("path", HRegexLabeling(device_labeling, d))
 ipFeature = Feature("dst ip", IPv4PrefixLabeling())
 
 if parsed_args.ip:
@@ -53,9 +55,12 @@ if parsed_args.ip:
 else:
     flow_labeling = TupleLabeling([pathFeature])
 
-clustering = GreedyCostBasedClustering(parsed_args.clusters)
-clusters = clustering.cluster(flows, Feature('flow', flow_labeling), parsed_args.batch)
+clustering = GreedyCostBasedClustering(parsed_args.clusters, parsed_args.batch)
+clusters = clustering.cluster(flows, Feature('flow', flow_labeling))
 
+print "final clusters:"
+for c in clusters:
+    print c
 
 
 
