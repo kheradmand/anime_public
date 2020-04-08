@@ -11,6 +11,7 @@ import time
 import random
 import heapq
 import logging
+import pickle
 
 class Clustering(object):
     pass
@@ -161,7 +162,7 @@ class GreedyCostBasedClustering(Clustering):
         logging.info("Clustering is finished")
         logging.info(">time %s", str(time.time()-start))
 
-        # self.store_stats()
+        # self.store_stats_csv()
         if plot:
             self.plot_stats(sum((x.cost for x in self.clusters[:len(flows)])))
 
@@ -180,11 +181,46 @@ class GreedyCostBasedClustering(Clustering):
             plt.title("time")
             plt.show()
 
-    def store_stats(self, file_name = "stats.csv"):
-        with open(file_name,'w') as f:
+    def store_stats_csv(self, dir="./"):
+        with open(dir + "/stats.csv",'w') as f:
             f.write("k,score,time\n")
             for r in self.stats:
                 f.write(",".join(map(str, list(r)))+"\n")
+
+    def store_internals_pk(self, dir="./", stats=True, clusters=True, parents=True):
+        if clusters:
+            logging.info("Started saving clusters")
+            with open(dir + "/clusters.pk", 'w') as f:
+                pickle.dump(self.clusters, f)
+            logging.info("Finished saving clusters")
+
+        if parents:
+            with open(dir + "/parents.pk", 'w') as f:
+                pickle.dump(self.parents, f)
+
+        if stats:
+            with open(dir + "/stats.pk", 'w') as f:
+                pickle.dump(self.stats, f)
+
+    def store_cluster_hierarchy_xml(self, dir="./"):
+        children = [[] for c in range(len(self.clusters))]
+        roots = []
+        for c, p in enumerate(self.parents):
+            if c == p:
+                roots.append(c)
+            else:
+                children[p].append(c)
+
+        def writeXML(f, n):
+            f.write("<cluster id=\"%d\" value=\"%s\">\n" % (n, self.clusters[n]))
+            for c in children[n]:
+                writeXML(f, c)
+            f.write("</cluster>\n")
+
+        with open(dir + "cluster_hierarchy.xml", 'w') as f:
+            for n in roots:
+                writeXML(f, n)
+
 
 
 
