@@ -1,0 +1,14 @@
+{
+  "u1" : {"parents": ["User"], "cost" : 1},
+  "u2" : {"parents": ["User"], "cost" : 1},
+  "u3" : {"parents": ["User"], "cost" : 1},
+  "s1" : {"parents": ["Server"], "cost" : 1},
+  "s2" : {"parents": ["Server"], "cost" : 1},
+  "s3" : {"parents": ["Server"], "cost" : 1},
+  "fw1" : {"parents": ["Firewall"], "cost" : 1},
+  "fw2" : {"parents": ["Firewall"], "cost" : 1},
+  "User" : {"parents": ["Any"], "cost" : 3},
+  "Server" : {"parents": ["Any"], "cost" : 3},
+  "Firewall" : {"parents": ["Any"], "cost" : 2},
+  "Any" : {"parents": [], "cost" : 8}
+}

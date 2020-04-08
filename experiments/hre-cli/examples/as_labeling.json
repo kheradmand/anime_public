@@ -1,0 +1,22 @@
+{
+  "r1" : {"parents": ["In"], "cost" : 1},
+  "r2" : {"parents": ["In"], "cost" : 1},
+  "r3" : {"parents": ["In"], "cost" : 1},
+  "r4" : {"parents": ["In"], "cost" : 1},
+  "r5" : {"parents": ["In"], "cost" : 1},
+
+  "as1" : {"parents": ["Provider"], "cost" : 1},
+  "as2" : {"parents": ["Provider"], "cost" : 1},
+  "as3" : {"parents": ["Customer"], "cost" : 1},
+  "as4" : {"parents": ["Peer"], "cost" : 1},
+
+  "Provider" : {"parents": ["Out"], "cost" : 10},
+  "Customer" : {"parents": ["Out"], "cost" : 10},
+  "Peer" : {"parents": ["Out"], "cost" : 10},
+
+  "In" : {"parents": ["Any"], "cost" : 10},
+
+  "Out" : {"parents": ["Any"], "cost" : 100},
+
+  "Any" : {"parents": [], "cost" : 1000}
+}
