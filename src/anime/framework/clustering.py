@@ -211,15 +211,15 @@ class GreedyCostBasedClustering(Clustering):
             else:
                 children[p].append(c)
 
-        def writeXML(f, n):
+        def write_xml(f, n):
             f.write("<cluster id=\"%d\" value=\"%s\">\n" % (n, self.clusters[n]))
             for c in children[n]:
-                writeXML(f, c)
+                write_xml(f, c)
             f.write("</cluster>\n")
 
-        with open(dir + "cluster_hierarchy.xml", 'w') as f:
+        with open(dir + "/cluster_hierarchy.xml", 'w') as f:
             for n in roots:
-                writeXML(f, n)
+                write_xml(f, n)
 
 
 

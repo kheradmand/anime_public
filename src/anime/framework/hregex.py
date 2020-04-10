@@ -6,7 +6,7 @@ __email__ =  "kheradm2@illinois.edu"
 """
 
 from heapq import *
-from labeling import Labeling, Spec, inf
+from labeling import *
 
 
 class HRegexElement(object):
@@ -127,6 +127,7 @@ class HRegexLabeling(Labeling):
                         cost, parent = closed[node]
 
                 ret.reverse()
+                print best_cost, best_cost**(-1.0/best[0])
                 ret = Spec((best_cost**(-1.0/best[0]))**self.d, HRegex(ret))
                 #print ret
                 return ret
@@ -177,9 +178,9 @@ class HRegexLabeling(Labeling):
                 assert(j <= len(l2) or j_m == 0)
 
                 # if any of l_m,i_m,j_m is true, then we can ignore that
-                if i_m == 1 and self.labeling.cost(a_i.label, l) < inf:
+                if i_m == 1 and self.labeling.subset(a_i.label, l):
                     update((n, i + 1, j, 0, j_m, l_m, l), 1)
-                if j_m == 1 and self.labeling.cost(b_j.label, l) < inf:
+                if j_m == 1 and self.labeling.subset(b_j.label, l):
                     update((n, i, j + 1, i_m, 0, l_m, l), 1)
                 if l_m == 1 and -n < N:
                     # optimization
@@ -202,10 +203,10 @@ class HRegexLabeling(Labeling):
                     labels = l1s & l2s
 
                     for ll in labels:
-                        update((-(-n + 1), i, j, i_m, j_m, 0, ll), self.labeling.cost(ll,ll))
+                        update((-(-n + 1), i, j, i_m, j_m, 0, ll), self.labeling.cost(ll))
 
                 # also possibility of character matching
-                if l_m == 0 and self.labeling.cost(a_i.label, l) < inf and self.labeling.cost(b_j.label, l) < inf:
+                if l_m == 0 and self.labeling.subset(a_i.label, l) and self.labeling.subset(b_j.label, l):
                     # must match both
                     ii, ii_m = (i, 1) if a_i.multiple else (i + 1, 0)
                     jj, jj_m = (j, 1) if b_j.multiple else (j + 1, 0)
@@ -213,11 +214,11 @@ class HRegexLabeling(Labeling):
                 else:
                     # can match only one
                     # with a_i
-                    if i <= len(l1) and self.labeling.cost(a_i.label, l) < inf:
+                    if i <= len(l1) and self.labeling.subset(a_i.label, l):
                         ii, ii_m = (i, 1) if a_i.multiple else (i + 1, 0)
                         update((n, ii, j, ii_m, j_m, 1, l), 1)
                     # with b_j
-                    if j <= len(l2) and self.labeling.cost(b_j.label, l) < inf:
+                    if j <= len(l2) and self.labeling.subset(b_j.label, l):
                         jj, jj_m = (j, 1) if b_j.multiple else (j + 1, 0)
                         update((n, i, jj, i_m, jj_m, 1, l), 1)
 

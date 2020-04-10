@@ -8,8 +8,6 @@ __email__ =  "kheradm2@illinois.edu"
 import collections
 import json
 
-inf = 1e100
-
 Spec = collections.namedtuple('Spec', ['cost', 'value'])
 
 class Labeling(object):
@@ -30,6 +28,12 @@ class Labeling(object):
 
     def meet(self, l1, l2):
         assert False
+
+    def meet(self, s):
+        assert False
+
+    def cardinality(self, l):
+        return self.cost(l)
 
 class Feature(object):
     def __init__(self, name, labeling):
@@ -66,6 +70,16 @@ class HierarchicalLabeling(Labeling):
 
             return pred
 
+    def visualize_dot(self, outfile, view=True):
+        from graphviz import Digraph
+        dot = Digraph(comment='Labeling')
+        for l in self.label_info.iterkeys():
+            dot.node(l, "%s (%d)" % (l, self.label_info[l]["cost"]))
+        for l in self.label_info.iterkeys():
+            for p in self.label_info[l]["parents"]:
+                dot.edge(p, l)
+        dot.render(outfile, view=view)
+
     def join(self, l1, l2):
         p1 = self.get_predecessors(l1)
         p2 = self.get_predecessors(l2)
@@ -80,14 +94,11 @@ class HierarchicalLabeling(Labeling):
 
         return Spec(self.label_info[best]["cost"], best)
 
-    def cost(self, src, dst):
-        ret = None
-        if dst not in self.get_predecessors(src):
-            ret = inf
-        else:
-            ret = self.label_info[dst]["cost"]
-        #print "cost({},{}) = {}".format(src, dst, ret)
-        return ret
+    def subset(self, l1, l2):
+        return l2 in self.get_predecessors(l1)
+
+    def cost(self, l):
+        return self.label_info[l]["cost"]
 
 
 class DValueLabeling(Labeling):
@@ -104,6 +115,12 @@ class DValueLabeling(Labeling):
             # l1 == l2
             return Spec(self.atom_cost, l1)
 
+    def cost(self, l):
+        if l == DValueLabeling.top:
+            return self.top_cost
+        else:
+            return self.atom_cost
+
 
 class TupleLabeling(Labeling):
     def __init__(self, features):
@@ -118,5 +135,20 @@ class TupleLabeling(Labeling):
             cost *= spec.cost
 
         return Spec(cost, tuple(joined))
+
+    def cost(self, l):
+        ret = 1
+
+        for i in range(len(self.features)):
+            ret *= self.features[i].labeling.cost(l[i])
+
+        return ret
+
+    def subset(self, l1, l2):
+        for i in range(len(self.features)):
+            if not self.features[i].labeling.subset(l1[i], l2[i]):
+                return False
+        return True
+
 
 

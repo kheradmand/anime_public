@@ -5,7 +5,7 @@ __email__ =  "kheradm2@illinois.edu"
     Various labeling designs for IP feature
 """
 
-from labeling import Labeling, Spec, inf
+from labeling import *
 import netaddr
 
 
@@ -30,6 +30,9 @@ class IPv4PrefixLabeling(Labeling):
         ret.prefixlen = prefixlen
 
         return Spec((1 << (32 - prefixlen)), ret)
+
+    def cost(self, l):
+        return len(l)
 
 
 class IPv4PrefixSetLabeling(Labeling):
