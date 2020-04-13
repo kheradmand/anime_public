@@ -53,3 +53,41 @@ class IPv4FlatLabeling(Labeling):
             return Spec(2**32, ret)
         else:
             return Spec(netaddr.IPNetwork(ret).size, ret)
+
+
+class IPv4SmallPrefixSetLabeling(Labeling):
+    def __init__(self, limit = 2):
+        assert limit > 0
+        self.limit = limit
+
+    def join(self, l1, l2):
+        print l1, l2
+        union = netaddr.IPSet(l1) | l2
+
+        while True:
+            union.compact()
+
+            cidrs = []
+            for p in union.iter_cidrs():
+                cidrs.append(p)
+
+            print "cidrs", cidrs
+            if len(cidrs) <= self.limit:
+                break
+
+            best = None
+            for i in range(len(cidrs) - 1):
+                merge = netaddr.spanning_cidr(cidrs[i:i+2])
+                if best is None or len(merge) < len(best):
+                    print "best updated from",best,"to",merge,"from",cidrs[i:i+2]
+                    best = merge
+            union = union | best
+        print union
+        return Spec(len(union), union)
+
+    def subset(self, l1, l2):
+        return netaddr.IPSet(l1).issubset(l2)
+
+    def cost(self, l):
+        return len(l)
+
