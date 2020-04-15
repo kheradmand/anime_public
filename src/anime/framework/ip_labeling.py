@@ -31,8 +31,24 @@ class IPv4PrefixLabeling(Labeling):
 
         return Spec((1 << (32 - prefixlen)), ret)
 
+    def meet(self, l1, l2):
+        meet = netaddr.IPSet(l1) & netaddr.IPSet(l2)
+        if len(meet) == 0:
+            return None
+        cidrs = []
+        for i in meet.iter_cidrs():
+            cidrs.append(i)
+        assert len(cidrs) == 1
+        return Spec(len(meet), cidrs[0])
+
+    def subset(self, l1, l2):
+        return netaddr.IPSet(l1).issubset(l2)
+
     def cost(self, l):
         return len(l)
+
+    def top(self):
+        return netaddr.IPNetwork('0.0.0.0/0')
 
 
 class IPv4PrefixSetLabeling(Labeling):
@@ -59,6 +75,7 @@ class IPv4SmallPrefixSetLabeling(Labeling):
     def __init__(self, limit = 2):
         assert limit > 0
         self.limit = limit
+
 
     def join(self, l1, l2):
         print l1, l2
