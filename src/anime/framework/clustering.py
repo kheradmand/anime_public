@@ -54,10 +54,17 @@ class GreedyCostBasedClustering(Clustering):
             else:
                 batch = [random.randint(i+1,len(self.clusters)-1) for x in range(batch_size)]
 
+            min_dist = None
             for j in batch:
                 spec = flow_labeling.join(self.clusters[i].value, self.clusters[j].value)
                 delta = spec.cost - self.clusters[i].cost - self.clusters[j].cost
-                heapq.heappush(heap, (delta, spec, (i, j)))
+                # heapq.heappush(heap, (delta, spec, (i, j))) optimization: no need to insert all distances, just the min
+                item = (delta, spec, (i, j))
+                if min_dist is None or item < min_dist:
+                    min_dist = item
+
+            if min_dist:
+                heapq.heappush(heap, min_dist)
 
         remaining_clusters = set(range(len(flows)))
 
@@ -102,6 +109,7 @@ class GreedyCostBasedClustering(Clustering):
 
             cost_sanity_check = self.clusters[new_cluster_id].cost
 
+            min_dist = None
             while True:
                 subsumed = set()
 
@@ -133,7 +141,10 @@ class GreedyCostBasedClustering(Clustering):
                         spec = flow_labeling.join(self.clusters[c].value, self.clusters[new_cluster_id].value)
 
                         delta = spec.cost - self.clusters[c].cost - self.clusters[new_cluster_id].cost
-                        heapq.heappush(heap, (delta, spec, (c, new_cluster_id)))
+                        #heapq.heappush(heap, (delta, spec, (c, new_cluster_id)))
+                        item = (delta, spec, (c, new_cluster_id))
+                        if min_dist is None or item < min_dist:
+                            min_dist = item
 
                 # remove subsumed clusters
                 remaining_clusters -= subsumed
@@ -146,6 +157,9 @@ class GreedyCostBasedClustering(Clustering):
                     logging.warning("All batch subsumed, using new batch")
 
             remaining_clusters.add(new_cluster_id)
+
+            if min_dist:
+                heapq.heappush(heap, min_dist)
 
             if batch_size == len(flows):
                 pass
