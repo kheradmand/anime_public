@@ -55,7 +55,7 @@ if parsed_args.ip:
 else:
     flow_labeling = TupleLabeling([pathFeature])
 
-clustering = GreedyCostBasedClustering(parsed_args.clusters, parsed_args.batch)
+clustering = HierarchicalClustering(parsed_args.clusters, parsed_args.batch)
 clusters = clustering.cluster(flows, Feature('flow', flow_labeling))
 
 print "final clusters:"

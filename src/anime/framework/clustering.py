@@ -19,14 +19,32 @@ class Clustering(object):
 plot = False
 
 
-class GreedyCostBasedClustering(Clustering):
-    def __init__(self, cluster_count=1, batch_size=0):
+def join_cost_distance(a, b, joined):
+    return joined.cost
+
+
+def cost_gain_distance(a, b, joined):
+    return joined.cost - a.cost - b.cost
+
+
+class HierarchicalClustering(Clustering):
+    def __init__(self, cluster_count=1, batch_size=0, distance_measure=cost_gain_distance,
+                 closest_clusters_bucket_size=3):
         self.cluster_count = cluster_count
         self.batch_size = batch_size
+        self.distance_measure = distance_measure
+        self.closest_clusters_bucket_size = closest_clusters_bucket_size
 
         self.clusters = []
         self.parents = []
         self.stats = []
+
+        # optimization: keep only a few closets clusters per cluster rather than distance to all clusters,
+        # recompute the rest only when necessary
+        self.closest_clusters = []
+
+        # places where recount happened
+        self.closest_clusters_recomputations = []
 
     def cluster(self, flows, feature, callback=None):
         flow_labeling = feature.labeling
@@ -37,127 +55,169 @@ class GreedyCostBasedClustering(Clustering):
 
         self.clusters = [flow_labeling.join(flow, flow) for flow in flows]
         self.parents = range(len(self.clusters))
+        self.closest_clusters = [[]] * len(self.clusters)
 
-        logging.debug("Initial clusters added")
+        logging.info("Initial clusters added")
 
         heap = []
         overall_cost = sum([c.cost for c in self.clusters])
 
         start = time.time()
 
+        def update_closest_clusters(i, batch, check_subsumption=False, update_other=True):
+            subsumed = []
+            for j in batch:
+                if check_subsumption and flow_labeling.subset(self.clusters[j].value, self.clusters[i].value):
+                    subsumed.append(j)
+                    logging.info("%s %s subsuming %s : %s", i, self.clusters[i].value, j, self.clusters[j])
+                    #overall_cost -= self.clusters[c].cost
+                else:
+                    spec = flow_labeling.join(self.clusters[i].value, self.clusters[j].value)
+                    distance = self.distance_measure(self.clusters[i], self.clusters[j], spec)
+
+                    self.closest_clusters[i] = sorted(self.closest_clusters[i] + [(distance, spec, (i, j))]) \
+                        [:self.closest_clusters_bucket_size]
+
+                    if update_other:
+                        self.closest_clusters[j] = sorted(self.closest_clusters[j] + [(distance, spec, (j, i))]) \
+                            [:self.closest_clusters_bucket_size]
+
+            return subsumed
+
+        def get_batch():
+            if len(remaining_clusters) <= batch_size:
+                # just go through everything
+                batch = remaining_clusters
+            else:
+                # sample a random batch
+                batch = set()
+
+                # choosing the more efficient way of sampling:
+                if (float(len(self.clusters)) / len(remaining_clusters)) * batch_size < len(remaining_clusters):
+                    while len(batch) < batch_size:
+                        r = random.randint(0, len(self.clusters) - 1)
+                        if r in remaining_clusters:
+                            batch.add(r)
+                else:
+                    batch = set(random.sample(remaining_clusters, batch_size))
+
+            return batch
+
+        def get_closest_cluster(c, recompute_if_empty=False):
+            assert c in remaining_clusters
+            while len(self.closest_clusters[c]) > 0:
+                if self.closest_clusters[c][0][2][1] in remaining_clusters:
+                    return self.closest_clusters[c][0]
+                else:
+                    self.closest_clusters[c] = self.closest_clusters[c][1:]
+
+            if recompute_if_empty and len(self.closest_clusters[c]) == 0:
+                update_closest_clusters(c, get_batch() - set([c]), check_subsumption=False, update_other=False)
+                self.closest_clusters_recomputations.append(len(remaining_clusters))
+                return get_closest_cluster(c)
+            else:
+                return None
+
+            # all closes clusters consumed
+
+
+
+        remaining_clusters = set(range(len(flows)))
+
         # initial distances
         for i in range(len(self.clusters)):
-            logging.debug("Adding distances for cluster %s", i)
+            logging.info("Adding distances for cluster %s", i)
 
             if len(self.clusters) - i <= batch_size:
                 batch = range(i + 1, len(self.clusters))
             else:
                 batch = [random.randint(i+1,len(self.clusters)-1) for x in range(batch_size)]
 
-            min_dist = None
-            for j in batch:
-                spec = flow_labeling.join(self.clusters[i].value, self.clusters[j].value)
-                delta = spec.cost - self.clusters[i].cost - self.clusters[j].cost
-                # heapq.heappush(heap, (delta, spec, (i, j))) optimization: no need to insert all distances, just the min
-                item = (delta, spec, (i, j))
-                if min_dist is None or item < min_dist:
-                    min_dist = item
-
+            update_closest_clusters(i, batch)
+            min_dist = get_closest_cluster(i)
             if min_dist:
                 heapq.heappush(heap, min_dist)
 
-        remaining_clusters = set(range(len(flows)))
 
         self.stats = []
         self.stats.append((len(remaining_clusters), overall_cost, time.time() - start))
-        logging.debug(self.stats[-1])
+        logging.info(self.stats[-1])
 
         if callback:
             callback(self, remaining_clusters)
 
         while len(remaining_clusters) > self.cluster_count:
-            logging.debug("Number of clusters so far %s", len(remaining_clusters))
+            logging.info("Number of clusters so far %s", len(remaining_clusters))
 
             best = None
             while True:
-                candidate = heapq.heappop(heap)
 
-                #print candidate
-                if candidate[2][0] in remaining_clusters and candidate[2][1] in remaining_clusters:
-                    best = candidate
-                    break
+                candidate = heapq.heappop(heap)
+                c_1, c_2 = candidate[2]
+
+                if c_1 in remaining_clusters:
+                    if c_2 in remaining_clusters:
+                        best = candidate
+                        break
+                    else:
+                        min_dist = get_closest_cluster(c_1, recompute_if_empty=True)
+                        if min_dist:
+                            heapq.heappush(heap, min_dist)
+                else:
+                    if c_2 in remaining_clusters:
+                        min_dist = get_closest_cluster(c_2, recompute_if_empty=True)
+                        if min_dist:
+                            heapq.heappush(heap, min_dist)
 
             assert best is not None
 
             new_cluster_id = len(self.clusters)
             best_clusters_to_merge = best[2]
             best_new_cluster = best[1]
-            best_delta = best[0]
-            logging.debug("Final best delta is %s %s with cluster id %s by merging %s %s %s",
-                         best_delta, best_new_cluster, new_cluster_id, best_clusters_to_merge,
+            best_distance = best[0]
+            logging.info("Final best distance is %s %s with cluster id %s by merging %s %s %s",
+                         best_distance, best_new_cluster, new_cluster_id, best_clusters_to_merge,
                          self.clusters[best_clusters_to_merge[0]], self.clusters[best_clusters_to_merge[1]])
 
-            overall_cost += best_delta
+            overall_cost += best_distance
 
             self.clusters.append(best_new_cluster)
             remaining_clusters -= set([best_clusters_to_merge[0], best_clusters_to_merge[1]])
+
+            self.closest_clusters.append([])
 
             self.parents.append(new_cluster_id)
             self.parents[best_clusters_to_merge[0]] = new_cluster_id
             self.parents[best_clusters_to_merge[1]] = new_cluster_id
 
-
             cost_sanity_check = self.clusters[new_cluster_id].cost
 
             min_dist = None
             while True:
-                subsumed = set()
-
                 # choosing the batch to go through
-                if len(remaining_clusters) <= batch_size:
-                    # just go through everything
-                    batch = remaining_clusters
-                else:
-                    # sample a random batch
-                    batch = set()
-
-                    # choosing the more efficient way of sampling:
-                    if (float(len(self.clusters)) / len(remaining_clusters)) * batch_size < len(remaining_clusters):
-                        while len(batch) < batch_size:
-                            r = random.randint(0,len(self.clusters)-1)
-                            if r in remaining_clusters:
-                                batch.add(r)
-                    else:
-                        batch = set(random.sample(remaining_clusters, batch_size))
+                batch = get_batch()
 
                 # now going through the batch
-                for c in batch:
-                    if flow_labeling.subset(self.clusters[c].value, self.clusters[new_cluster_id].value):
-                        subsumed.add(c)
-                        print new_cluster_id, self.clusters[new_cluster_id].value, "subsuming ", c, ":", self.clusters[c]
-                        overall_cost -= self.clusters[c].cost
-                    else:
-                        cost_sanity_check += self.clusters[c].cost
-                        spec = flow_labeling.join(self.clusters[c].value, self.clusters[new_cluster_id].value)
-
-                        delta = spec.cost - self.clusters[c].cost - self.clusters[new_cluster_id].cost
-                        #heapq.heappush(heap, (delta, spec, (c, new_cluster_id)))
-                        item = (delta, spec, (c, new_cluster_id))
-                        if min_dist is None or item < min_dist:
-                            min_dist = item
+                subsumed = update_closest_clusters(new_cluster_id, batch, check_subsumption=True, update_other=True)
 
                 # remove subsumed clusters
-                remaining_clusters -= subsumed
+                overall_cost -= sum([self.clusters[c].cost for c in subsumed])
+                remaining_clusters -= set(subsumed)
+
                 for c in subsumed:
                     self.parents[c] = new_cluster_id
 
                 if batch_size >= len(remaining_clusters) + len(subsumed) or len(subsumed) < len(batch):
                     break
                 else:
+                    # no problem in case of computing closets clusters,
+                    # there will be no duplicates because that function is called again for a new batch
+                    # only if the previous batch is completely subsumed
                     logging.warning("All batch subsumed, using new batch")
 
             remaining_clusters.add(new_cluster_id)
 
+            min_dist = get_closest_cluster(new_cluster_id)
             if min_dist:
                 heapq.heappush(heap, min_dist)
 
@@ -166,8 +226,8 @@ class GreedyCostBasedClustering(Clustering):
                 #assert(cost_sanity_check - overall_cost < 1e-10)
 
             self.stats.append((len(remaining_clusters), overall_cost, time.time() - start))
-            logging.debug("Cumulative cost is %s", overall_cost)
-            logging.debug(self.stats[-1])
+            logging.info("Cumulative cost is %s", overall_cost)
+            logging.info(self.stats[-1])
 
             if callback:
                 callback(self, remaining_clusters)
@@ -175,7 +235,7 @@ class GreedyCostBasedClustering(Clustering):
         # clustering is done
         logging.info("Clustering is finished")
         logging.info(">time %s", str(time.time()-start))
-
+        logging.info(">recounts %s", len(self.closest_clusters_recomputations))
         # self.store_stats_csv()
         if plot:
             self.plot_stats(sum((x.cost for x in self.clusters[:len(flows)])))
@@ -215,6 +275,10 @@ class GreedyCostBasedClustering(Clustering):
         if stats:
             with open(dir + "/stats.pk", 'w') as f:
                 pickle.dump(self.stats, f)
+
+        if stats:
+            with open(dir + "/recounts.pk", 'w') as f:
+                pickle.dump(self.closest_clusters_recomputations, f)
 
     def store_cluster_hierarchy_xml(self, dir="./"):
         children = [[] for c in range(len(self.clusters))]
