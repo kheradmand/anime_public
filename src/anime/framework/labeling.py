@@ -53,11 +53,11 @@ class HierarchicalLabeling(Labeling):
         self.successors = {}
         self.top_label = None
 
-        for l, info in label_info.iteritems():
+        for l, info in label_info.items():
             info["children"] = set()
 
         # find children, find top
-        for l,info in label_info.iteritems():
+        for l,info in label_info.items():
             if len(info["parents"]) == 0:
                 assert self.top_label is None
                 self.top_label = l
@@ -76,7 +76,7 @@ class HierarchicalLabeling(Labeling):
             return HierarchicalLabeling(label_info)
 
     def get_predecessors(self, label):
-        if label in self.predecessors.keys():
+        if label in self.predecessors:
             return self.predecessors[label]
         else:
             pred = set()
@@ -92,7 +92,7 @@ class HierarchicalLabeling(Labeling):
             return pred
 
     def get_successors(self, label):
-        if label not in self.successors.keys():
+        if label not in self.successors:
             suc = set()
 
             def add_children(label):
@@ -108,9 +108,9 @@ class HierarchicalLabeling(Labeling):
     def visualize_dot(self, outfile, view=True):
         from graphviz import Digraph
         dot = Digraph(comment='Labeling')
-        for l in self.label_info.iterkeys():
+        for l in self.label_info.keys():
             dot.node(l, "%s (%d)" % (l, self.label_info[l]["cost"]))
-        for l in self.label_info.iterkeys():
+        for l in self.label_info.keys():
             for p in self.label_info[l]["parents"]:
                 dot.edge(p, l)
         dot.render(outfile, view=view)
@@ -126,7 +126,9 @@ class HierarchicalLabeling(Labeling):
         for label in inter:
             if best is None or self.label_info[label]["cost"] < self.label_info[best]["cost"]:
                 best = label
-
+            # workaround for cases where parent and children have the same cost (although it should not be the case technically)
+            elif abs(self.label_info[label]["cost"] - self.label_info[best]["cost"]) < 1e-10 and best in self.get_predecessors(label):
+                best = label
         return Spec(self.label_info[best]["cost"], best)
 
     def meet(self, l1, l2):
@@ -152,7 +154,7 @@ class HierarchicalLabeling(Labeling):
         return self.label_info[l]["cost"]
 
     def cardinality(self, l):
-        if "cardinality" in self.label_info[l].keys():
+        if "cardinality" in self.label_info[l]:
             return self.label_info[l]["cardinality"]
         else:
             return self.cost(l)

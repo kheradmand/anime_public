@@ -5,13 +5,12 @@ __email__ =  "kheradm2@illinois.edu"
     Various clustering algorithms
 """
 
-
-import math
 import time
 import random
 import heapq
 import logging
 import pickle
+import collections
 
 class Clustering(object):
     pass
@@ -26,6 +25,7 @@ def join_cost_distance(a, b, joined):
 def cost_gain_distance(a, b, joined):
     return joined.cost - a.cost - b.cost
 
+IncrementalIntentInfo = collections.namedtuple('IncrementalIntentInfo', ['k', 'added', 'removed'])
 
 class HierarchicalClustering(Clustering):
     def __init__(self, cluster_count=1, batch_size=0, distance_measure=cost_gain_distance,
@@ -38,6 +38,7 @@ class HierarchicalClustering(Clustering):
         self.clusters = []
         self.parents = []
         self.stats = []
+        self.intents = [] # (k, added, removed)
 
         # optimization: keep only a few closets clusters per cluster rather than distance to all clusters,
         # recompute the rest only when necessary
@@ -54,7 +55,7 @@ class HierarchicalClustering(Clustering):
             batch_size = len(flows)
 
         self.clusters = [flow_labeling.join(flow, flow) for flow in flows]
-        self.parents = range(len(self.clusters))
+        self.parents = list(range(len(self.clusters)))
         self.closest_clusters = [[]] * len(self.clusters)
 
         logging.info("Initial clusters added")
@@ -129,7 +130,7 @@ class HierarchicalClustering(Clustering):
             logging.info("Adding distances for cluster %s", i)
 
             if len(self.clusters) - i <= batch_size:
-                batch = range(i + 1, len(self.clusters))
+                batch = list(range(i + 1, len(self.clusters)))
             else:
                 batch = [random.randint(i+1,len(self.clusters)-1) for x in range(batch_size)]
 
@@ -138,16 +139,17 @@ class HierarchicalClustering(Clustering):
             if min_dist:
                 heapq.heappush(heap, min_dist)
 
-
-        self.stats = []
         self.stats.append((len(remaining_clusters), overall_cost, time.time() - start))
         logging.info(self.stats[-1])
 
+        self.intents.append(IncrementalIntentInfo(len(remaining_clusters), list(remaining_clusters), []))
         if callback:
             callback(self, remaining_clusters)
 
         while len(remaining_clusters) > self.cluster_count:
             logging.info("Number of clusters so far %s", len(remaining_clusters))
+
+            removed = []
 
             best = None
             while True:
@@ -183,6 +185,8 @@ class HierarchicalClustering(Clustering):
 
             self.clusters.append(best_new_cluster)
             remaining_clusters -= set([best_clusters_to_merge[0], best_clusters_to_merge[1]])
+            removed += best_clusters_to_merge
+
 
             self.closest_clusters.append([])
 
@@ -202,6 +206,7 @@ class HierarchicalClustering(Clustering):
 
                 # remove subsumed clusters
                 overall_cost -= sum([self.clusters[c].cost for c in subsumed])
+                removed += subsumed
                 remaining_clusters -= set(subsumed)
 
                 for c in subsumed:
@@ -229,6 +234,7 @@ class HierarchicalClustering(Clustering):
             logging.info("Cumulative cost is %s", overall_cost)
             logging.info(self.stats[-1])
 
+            self.intents.append(IncrementalIntentInfo(len(remaining_clusters), [new_cluster_id], removed))
             if callback:
                 callback(self, remaining_clusters)
 
@@ -268,6 +274,9 @@ class HierarchicalClustering(Clustering):
                 pickle.dump(self.clusters, f)
             logging.info("Finished saving clusters")
 
+            with open(dir + "/intents.pk", 'w') as f:
+                pickle.dump(self.intents, f)
+
         if parents:
             with open(dir + "/parents.pk", 'w') as f:
                 pickle.dump(self.parents, f)
@@ -279,6 +288,7 @@ class HierarchicalClustering(Clustering):
         if stats:
             with open(dir + "/recounts.pk", 'w') as f:
                 pickle.dump(self.closest_clusters_recomputations, f)
+
 
     def store_cluster_hierarchy_xml(self, dir="./"):
         children = [[] for c in range(len(self.clusters))]
@@ -318,7 +328,7 @@ class MDSClustering(Clustering):
         dist = [[flow_labeling.join(f1,f2).cost for f2 in flows] for f1 in flows]
 
         import matplotlib.pyplot as plt
-        print dist
+        print(dist)
         plt.imshow(dist, zorder=2, cmap='Blues', interpolation='nearest')
         plt.colorbar()
         plt.show()
@@ -332,18 +342,18 @@ class MDSClustering(Clustering):
 
         cls = {}
         for i,c in enumerate(clusters.labels_):
-            if c not in cls.keys():
+            if c not in cls:
                 cls[c] = [i]
             else:
                 cls[c] += [i]
 
-        for k,v in cls.iteritems():
+        for k,v in cls.items():
             spec = flow_labeling.join(flows[v[0]], flows[v[0]])
             #print "-", spec, flows[v[0]]
             for i in range(1,len(v)):
                 spec = flow_labeling.join(spec.value, flows[v[i]])
                 #print "-", spec, flows[v[i]]
-            print "------",spec
+            print("------",spec)
 
 
         plt.scatter(out[:, 0], out[:, 1], c=clusters.labels_)
@@ -352,3 +362,156 @@ class MDSClustering(Clustering):
             plt.annotate(str(f),[out[i,0],out[i,1]], fontsize=5)
 
         plt.show()
+
+
+
+class HierarchicalClusteringWithIndex(HierarchicalClustering):
+
+    def cluster(self, flows, feature, callback=None):
+        from .index import RTreeIndex
+        flow_labeling = feature.labeling
+
+        batch_size = self.batch_size
+        if batch_size == 0:
+            batch_size = len(flows)
+
+        self.clusters = [flow_labeling.join(flow, flow) for flow in flows]
+        self.parents = list(range(len(self.clusters)))
+        self.closest_clusters = [[]] * len(self.clusters)
+
+        logging.info("Initial clusters added")
+
+        heap = []
+        overall_cost = sum([c.cost for c in self.clusters])
+
+        start = time.time()
+
+
+        remaining_clusters = set(range(len(flows)))
+
+        index = RTreeIndex(feature)
+
+        for i in range(len(self.clusters)):
+            index.insert(self.clusters[i], i)
+
+
+
+        def get_closest_cluster(c):
+            res = index.get_knn_approx(self.clusters[c])
+            #res = index.get_knn_precise(self.clusters[c])
+            assert res[0][1] == c
+            return None if len(res) < 2 else res[1][1]
+
+
+        for i in range(len(self.clusters)):
+            logging.info("Adding distances for cluster %s", i)
+
+            j = get_closest_cluster(i)
+            joined = flow_labeling.join(self.clusters[i].value, self.clusters[j].value)
+            dist = cost_gain_distance(self.clusters[i], self.clusters[j], joined)
+            heapq.heappush(heap, (dist, joined, (i,j)))
+
+
+        self.stats.append((len(remaining_clusters), overall_cost, time.time() - start))
+        logging.info(self.stats[-1])
+
+        self.intents.append(IncrementalIntentInfo(len(remaining_clusters), list(remaining_clusters), []))
+        if callback:
+            callback(self, remaining_clusters)
+
+        while len(remaining_clusters) > self.cluster_count:
+            logging.info("Number of clusters so far %s", len(remaining_clusters))
+
+            removed = []
+
+            best = None
+            while True:
+
+                candidate = heapq.heappop(heap)
+                c_1, c_2 = candidate[2]
+
+                if c_1 in remaining_clusters:
+                    if c_2 in remaining_clusters:
+                        best = candidate
+                        break
+                    else:
+                        j = get_closest_cluster(c_1)
+                        joined = flow_labeling.join(self.clusters[c_1].value, self.clusters[j].value)
+                        dist = cost_gain_distance(self.clusters[c_1], self.clusters[j], joined)
+                        heapq.heappush(heap, (dist, joined, (c_1, j)))
+                else:
+                    if c_2 in remaining_clusters:
+                        j = get_closest_cluster(c_2)
+                        joined = flow_labeling.join(self.clusters[c_2].value, self.clusters[j].value)
+                        dist = cost_gain_distance(self.clusters[c_2], self.clusters[j], joined)
+                        heapq.heappush(heap, (dist, joined, (c_2, j)))
+
+            assert best is not None
+
+            new_cluster_id = len(self.clusters)
+            best_clusters_to_merge = best[2]
+            best_new_cluster = best[1]
+            best_distance = best[0]
+            logging.info("Final best distance is %s %s with cluster id %s by merging %s %s %s",
+                         best_distance, best_new_cluster, new_cluster_id, best_clusters_to_merge,
+                         self.clusters[best_clusters_to_merge[0]], self.clusters[best_clusters_to_merge[1]])
+
+            overall_cost += best_distance
+
+            self.clusters.append(best_new_cluster)
+            remaining_clusters -= set([best_clusters_to_merge[0], best_clusters_to_merge[1]])
+            # removed += best_clusters_to_merge # will automatically happen when removing subsumed clusters
+
+
+            self.closest_clusters.append([])
+
+            self.parents.append(new_cluster_id)
+            # self.parents[best_clusters_to_merge[0]] = new_cluster_id
+            # self.parents[best_clusters_to_merge[1]] = new_cluster_id
+
+            cost_sanity_check = self.clusters[new_cluster_id].cost
+
+            subsumed = index.get_subsets(best_new_cluster)
+            subsumed = [x[1] for x in subsumed]
+            index.remove_subset(best_new_cluster)
+
+            # remove subsumed clusters
+            overall_cost -= sum([self.clusters[c].cost for c in subsumed])
+            removed += subsumed
+            remaining_clusters -= set(subsumed)
+
+            for c in subsumed:
+                print("subsumed", self.clusters[c])
+                self.parents[c] = new_cluster_id
+
+            min_dist = None
+
+
+            remaining_clusters.add(new_cluster_id)
+
+            index.insert(best_new_cluster, new_cluster_id)
+
+            if len(remaining_clusters) > 1:
+                j = get_closest_cluster(new_cluster_id)
+                joined = flow_labeling.join(self.clusters[new_cluster_id].value, self.clusters[j].value)
+                dist = cost_gain_distance(self.clusters[new_cluster_id], self.clusters[j], joined)
+                heapq.heappush(heap, (dist, joined, (new_cluster_id, j)))
+
+            self.stats.append((len(remaining_clusters), overall_cost, time.time() - start))
+            logging.info("Cumulative cost is %s", overall_cost)
+            logging.info(self.stats[-1])
+
+            self.intents.append(IncrementalIntentInfo(len(remaining_clusters), [new_cluster_id], removed))
+            if callback:
+                callback(self, remaining_clusters)
+
+        # clustering is done
+        logging.info("Clustering is finished")
+        logging.info(">time %s", str(time.time()-start))
+        logging.info(">recounts %s", len(self.closest_clusters_recomputations))
+        # self.store_stats_csv()
+        if plot:
+            self.plot_stats(sum((x.cost for x in self.clusters[:len(flows)])))
+
+        return [self.clusters[c] for c in remaining_clusters]
+

@@ -42,7 +42,7 @@ class MeetSemiLattice(object):
 
     def get_node(self, l):
         new = False
-        if l not in self.label_to_node.keys():
+        if l not in self.label_to_node:
             self.label_to_node[l] = LatticeNode(l)
             new = True
         return self.label_to_node[l], new
@@ -51,7 +51,7 @@ class MeetSemiLattice(object):
         self.print_subtree(self.root)
 
     def print_subtree(self, n, level = 1):
-        print "-"*level, n
+        print("-"*level, n)
         for c in n.children:
             self.print_subtree(c, level + 1)
 
@@ -74,7 +74,7 @@ class MeetSemiLattice(object):
         self.get_cardinality(self.root)
 
     def get_all_nodes(self):
-        return self.label_to_node.values()
+        return list(self.label_to_node.values())
 
 
     def _get_node_subtree(self, n, res):
@@ -150,8 +150,8 @@ import unittest
 class TestLattice(unittest.TestCase):
     def test_lattice_insertion_ip(self):
         import netaddr
-        from labeling import Feature
-        from ip_labeling import IPv4PrefixLabeling
+        from .labeling import Feature
+        from .ip_labeling import IPv4PrefixLabeling
 
         feature = Feature('ip', IPv4PrefixLabeling())
 
@@ -167,7 +167,7 @@ class TestLattice(unittest.TestCase):
         self.assertEqual(lattice.get_cardinality(lattice.root), 2**32 - 1 - 4)
 
     def test_lattice_insertion_tuple(self):
-        from labeling import *
+        from .labeling import *
 
         feature = Feature('tuple', TupleLabeling(
             [Feature('src',  DValueLabeling(3)), Feature('dst', DValueLabeling(3))]))

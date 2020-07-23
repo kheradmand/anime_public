@@ -5,7 +5,8 @@ __email__ =  "kheradm2@illinois.edu"
     Various indexing techniques
 """
 
-from labeling import Spec
+import heapq
+from .labeling import Spec
 
 
 class Index(object):
@@ -22,16 +23,19 @@ class RtreeIndexNode:
         self.bounding_box = bounding_box
         self.objects = []
 
-        self.covered = 0
+        self.covered_approx = 0
 
 
 class RTreeIndex(Index):
-    def __init__(self, feature, node_min_size=4, node_max_size=10):
+    def __init__(self, feature, node_min_size=2, node_max_size=5):
         self.feature = feature
         top = feature.labeling.top()
         self.root = RtreeIndexNode(Spec(feature.labeling.cost(top), top))
         self.node_min_size = node_min_size
         self.node_max_size = node_max_size
+
+
+
 
     def insert(self, key, value):
         new_child = self._insert(key, value, self.root)
@@ -39,38 +43,55 @@ class RTreeIndex(Index):
             new_root = RtreeIndexNode(self.feature.labeling.join(self.root.bounding_box.value, new_child.bounding_box.value))
             new_root.is_leaf = False
             new_root.objects = [self.root, new_child]
-            new_root.covered = self.root.covered + new_child.covered
+            new_root.covered_approx = self.root.covered_approx + new_child.covered_approx
             self.root = new_root
+        #self._sanity_check(self.root)
 
     def remove_subset(self, key):
-        original_covered = self.root.covered
+        original_covered = self.root.covered_approx
         self._remove_subset(key, self.root)
-        if self.root.covered == 0:
+        if len(self.root.objects) == 0:
             top = self.feature.labeling.top()
             self.root.bounding_box = Spec(self.feature.labeling.cost(top), top)
             self.root.is_leaf =  True
-        return original_covered - self.root.covered
+        #self._sanity_check(self.root)
+        return original_covered - self.root.covered_approx
+
+
+    def _sanity_check(self, n):
+        for o in n.objects:
+                b = isinstance(o, RtreeIndexNode)
+                assert not b if n.is_leaf else b
+        if n != self.root:
+            bb = RTreeIndex.obj_bb(n.objects[0])
+            for o in n.objects[1:]:
+                bb = self.feature.labeling.join(bb.value, RTreeIndex.obj_bb(o).value)
+            assert bb == n.bounding_box
+        if not n.is_leaf:
+            for o in n.objects:
+                self._sanity_check(o)
 
     def _remove_subset(self, key, n):
         if self.feature.labeling.subset(n.bounding_box.value, key.value):
-            n.covered = 0
+            n.covered_approx = 0
             n.objects = []
         else:
+            objects_before_remove = [str(RTreeIndex.obj_bb(o)) for o in n.objects]
             if n.is_leaf:
                 for i in range(len(n.objects)):
                     if self.feature.labeling.subset(RTreeIndex.leaf_obj_get_bb(n.objects[i]).value, key.value):
-                        n.covered -= RTreeIndex.leaf_obj_get_bb(n.objects[i]).cost
+                        n.covered_approx -= RTreeIndex.leaf_obj_get_bb(n.objects[i]).cost
                         n.objects[i] = None
-                n.objects = filter(lambda x: x is not None, n.objects)
+                n.objects = [x for x in n.objects if x is not None]
             else:
                 for i in range(len(n.objects)):
                     if self.feature.labeling.meet(RTreeIndex.internal_obj_get_bb(n.objects[i]).value, key.value):
-                        n.covered -= n.objects[i].covered
+                        n.covered_approx -= n.objects[i].covered_approx
                         self._remove_subset(key, n.objects[i])
-                        n.covered += n.objects[i].covered
-                n.objects = filter(lambda o: o.covered > 0, n.objects)
+                        n.covered_approx += n.objects[i].covered_approx
+                n.objects = [o for o in n.objects if len(o.objects) > 0]
 
-            assert len(n.objects) > 0
+            assert n == self.root or len(n.objects) > 0
 
 
             if n.is_leaf:
@@ -106,7 +127,7 @@ class RTreeIndex(Index):
             groups = [[n.objects[a]],[n.objects[b]]]
             bounding_boxes = [get_bb(n.objects[a]), get_bb(n.objects[b])]
             covered = [get_bb(n.objects[a]).cost, get_bb(n.objects[b]).cost] if n.is_leaf\
-                else [n.objects[a].covered, n.objects[b].covered]
+                else [n.objects[a].covered_approx, n.objects[b].covered_approx]
 
             for i in range(l):
                 # print i,
@@ -143,7 +164,7 @@ class RTreeIndex(Index):
                 o = n.objects[i]
                 groups[g].append(o)
                 bounding_boxes[g] = self.feature.labeling.join(bounding_boxes[g].value, get_bb(o).value)
-                covered[g] += get_bb(o).cost if n.is_leaf else o.covered
+                covered[g] += get_bb(o).cost if n.is_leaf else o.covered_approx
 
             # print "new_sets"
             # print groups[0], bounding_boxes[0]
@@ -154,12 +175,12 @@ class RTreeIndex(Index):
 
             n.objects = groups[0]
             n.bounding_box = bounding_boxes[0]
-            n.covered = covered[0]
+            n.covered_approx = covered[0]
 
             np = RtreeIndexNode(bounding_boxes[1])
             np.is_leaf = n.is_leaf
             np.objects = groups[1]
-            np.covered = covered[1]
+            np.covered_approx = covered[1]
 
             return np
 
@@ -169,13 +190,13 @@ class RTreeIndex(Index):
         if n is None:
             self.print_index(self.root, level_limit=level_limit)
         else:
-            print '--' * level, n.bounding_box, n.covered
+            print('--' * level, n.bounding_box, n.covered_approx)
             if not n.is_leaf:
                 for o in n.objects:
                     self.print_index(o, level+1, level_limit)
             else:
                 for o in n.objects:
-                    print '--' * (level+1), o
+                    print('--' * (level+1), o)
 
     @staticmethod
     def leaf_obj_get_bb(obj):
@@ -185,9 +206,17 @@ class RTreeIndex(Index):
     def internal_obj_get_bb(obj):
         return obj.bounding_box
 
+    @staticmethod
+    def obj_bb(obj):
+        if isinstance(obj, RtreeIndexNode):
+            return RTreeIndex.internal_obj_get_bb(obj)
+        else:
+            return RTreeIndex.leaf_obj_get_bb(obj)
+
+
     def _insert(self, key, value, n):
         n.bounding_box = self.feature.labeling.join(n.bounding_box.value, key.value)
-        n.covered += key.cost # assumption: no overlap between entries
+        n.covered_approx += key.cost # assumption: no overlap between entries
 
         if n.is_leaf:
             n.objects.append((key,value)) # assumption: key is unique
@@ -247,18 +276,18 @@ class RTreeIndex(Index):
     #         self.compute_node_cover_cost(self.root)
     #     else:
     #         if n.is_leaf:
-    #             n.covered = sum(RTreeIndex.leaf_obj_get_bb(c).cost for c in n.objects)
+    #             n.covered_approx = sum(RTreeIndex.leaf_obj_get_bb(c).cost for c in n.objects)
     #         else:
-    #             n.covered = sum(self.compute_node_cover_cost(c) for c in n.objects)
+    #             n.covered_approx = sum(self.compute_node_cover_cost(c) for c in n.objects)
     #
-    #         return n.covered
+    #         return n.covered_approx
 
     def get_cover(self, key):
         return self._get_cover(key, self.root)
 
     def _get_cover(self, key, n):
         if self.feature.labeling.subset(n.bounding_box.value, key.value):
-            ret = n.covered
+            ret = n.covered_approx
         else:
             ret = 0
             if n.is_leaf:
@@ -289,6 +318,47 @@ class RTreeIndex(Index):
             for o in n.objects:
                 self._get_all_bounding_boxes(o, acc)
 
+    @staticmethod
+    def get_bb(n, o):
+        if n.is_leaf:
+            return RTreeIndex.leaf_obj_get_bb(o)
+        else:
+            return RTreeIndex.internal_obj_get_bb(o)
+
+    def get_knn_approx(self, key, k=2):
+        heap = []
+        joined = self.feature.labeling.join(self.root.bounding_box.value, key.value)
+        dist = joined.cost - self.root.bounding_box.cost - key.cost
+        entry = (dist, joined, self.root) # costdiff, joined, obj
+        heapq.heappush(heap, entry)
+        ret = []
+        while len(heap) > 0 and len(ret) < k:
+            dist,joined,obj = heapq.heappop(heap)
+            #print dist, joined, obj, len(heap), len(ret)
+
+            if isinstance(obj, RtreeIndexNode):
+                for o in obj.objects:
+                    bb = RTreeIndex.get_bb(obj, o)
+                    joined = self.feature.labeling.join(bb.value, key.value)
+                    dist = joined.cost - bb.cost - key.cost
+                    heapq.heappush(heap, (dist, joined, o))
+            else:
+                ret.append(obj)
+
+        return ret
+
+    def get_knn_precise(self, key, k=2):
+        all_entries = self.get_subsets(self.root.bounding_box)
+
+        heap = []
+        for e in all_entries:
+            joined = self.feature.labeling.join(RTreeIndex.leaf_obj_get_bb(e).value, key.value)
+            dist = joined.cost - RTreeIndex.leaf_obj_get_bb(e).cost - key.cost
+            heap.append((dist, joined, e))
+
+        heap = sorted(heap)
+        return [obj for _, _, obj in heap[:k]]
+
 
 
 
@@ -299,8 +369,8 @@ import unittest
 class TestIndex(unittest.TestCase):
     def test_index(self):
         import netaddr
-        from labeling import Feature, Spec
-        from ip_labeling import IPv4PrefixLabeling
+        from .labeling import Feature, Spec
+        from .ip_labeling import IPv4PrefixLabeling
 
         feature = Feature('ip', IPv4PrefixLabeling())
 
@@ -310,18 +380,22 @@ class TestIndex(unittest.TestCase):
 
         index.print_index()
 
+
+        print(index.get_knn_approx(Spec(1, (netaddr.IPNetwork('192.186.1.0/32')))))
+        print(index.get_knn_precise(Spec(1, (netaddr.IPNetwork('192.186.1.0/32')))))
+
         subsets = index.get_subsets(Spec(1, netaddr.IPNetwork('192.186.1.0/30')))
-        print subsets
+        print(subsets)
         self.assertEqual(len(subsets), 4)
 
         cover_dec = index.remove_subset(Spec(1, netaddr.IPNetwork('192.186.1.0/30')))
-        print cover_dec
+        print(cover_dec)
         self.assertEqual(cover_dec, 4)
 
         index.print_index()
 
         cover_dec = index.remove_subset(Spec(256, netaddr.IPNetwork('192.186.1.0/24')))
-        print cover_dec
+        print(cover_dec)
         self.assertEqual(cover_dec, 252)
 
         index.print_index()

@@ -2,9 +2,9 @@ __author__ = "Ali Kheradmand"
 __email__ =  "kheradm2@illinois.edu"
 
 import unittest
-from ip_labeling import *
-from labeling import *
-from hregex import *
+from .ip_labeling import *
+from .labeling import *
+from .hregex import *
 
 
 class TestAnime(unittest.TestCase):

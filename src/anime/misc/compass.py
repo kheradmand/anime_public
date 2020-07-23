@@ -42,7 +42,7 @@ class NDBEntry(object):
             feature_id = int(key.split('_')[1])
             return self.additional_features[feature_id]
         else:
-            print 'UNKNOWN FEATURE: %s' % key
+            print('UNKNOWN FEATURE: %s' % key)
 
     def __str__(self):
         return "{path} - {destination} - {prefix} - {size} - {sp}".format(path=" -> ".join(self.path),
@@ -57,7 +57,7 @@ class NDBEntry(object):
 
 
 def compass(paths, features, k = 4, t = 100):
-    print "running compass on {} paths with features {}".format(len(paths), str(features))
+    print("running compass on {} paths with features {}".format(len(paths), str(features)))
 
     import time
     start = time.time()
@@ -69,7 +69,7 @@ def compass(paths, features, k = 4, t = 100):
         for p in paths:
             v = p.get(f)
             # even if v is None we want to keep it
-            if v not in count[f].keys():
+            if v not in count[f]:
                 count[f][v] = set()
             count[f][v].add(p)
     S = []
@@ -78,11 +78,11 @@ def compass(paths, features, k = 4, t = 100):
 
 
     while len(S) < k:
-        print "so far S is", S, " Q is ", Q
+        print("so far S is", S, " Q is ", Q)
         best_f = None
         best_v = None
         for f in Q:
-            for v in count[f].keys():
+            for v in list(count[f].keys()):
                 if not v:
                     continue
                 if not best_f or len(count[f][v]) > len(count[best_f][best_v]):
@@ -94,7 +94,7 @@ def compass(paths, features, k = 4, t = 100):
         if not best_v:
             assert False
 
-        print "best feature is", best_f, "best values is", best_v, "with ",len(count[best_f][best_v]), "paths"
+        print("best feature is", best_f, "best values is", best_v, "with ",len(count[best_f][best_v]), "paths")
 
         #for p in count[best_f][best_v]:
         #    print p
@@ -102,7 +102,7 @@ def compass(paths, features, k = 4, t = 100):
         L.append((best_f, best_v))
         Q.remove(best_f)
 
-        for worse_v in count[best_f].keys():
+        for worse_v in list(count[best_f].keys()):
             if worse_v != best_v:
                 for p in count[best_f][worse_v]:
                     for f in Q:
@@ -118,10 +118,10 @@ def compass(paths, features, k = 4, t = 100):
         # check if we can expand the current specification without any changes to the satisfying paths
         removable = set()
         for f in Q:
-            for v in count[f].keys():
+            for v in list(count[f].keys()):
                 if v: #ignore None
                     if count[f][v] == count[best_f][best_v]:
-                        print "adding", f,v
+                        print("adding", f,v)
                         L.append((f,v))
                         removable.add(f)
                         break
@@ -134,9 +134,9 @@ def compass(paths, features, k = 4, t = 100):
 
         S.append(list(L))
 
-    print "S is ", S
+    print("S is ", S)
 
-    print ">time", time.time() - start
+    print(">time", time.time() - start)
 
     return S
 
@@ -183,7 +183,7 @@ def main(example_path):
     #                                                                                              len(topo.edges()))
     output += "This is a random flow: {}".format(random.choice(paths))
 
-    print output
+    print(output)
 
     with open(config_path) as f:
         config = json.load(f)

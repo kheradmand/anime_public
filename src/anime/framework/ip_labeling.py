@@ -5,7 +5,7 @@ __email__ =  "kheradm2@illinois.edu"
     Various labeling designs for IP feature
 """
 
-from labeling import *
+from .labeling import *
 import netaddr
 
 
@@ -78,7 +78,7 @@ class IPv4SmallPrefixSetLabeling(Labeling):
 
 
     def join(self, l1, l2):
-        print l1, l2
+        print(l1, l2)
         union = netaddr.IPSet(l1) | l2
 
         while True:
@@ -88,7 +88,7 @@ class IPv4SmallPrefixSetLabeling(Labeling):
             for p in union.iter_cidrs():
                 cidrs.append(p)
 
-            print "cidrs", cidrs
+            print("cidrs", cidrs)
             if len(cidrs) <= self.limit:
                 break
 
@@ -96,10 +96,10 @@ class IPv4SmallPrefixSetLabeling(Labeling):
             for i in range(len(cidrs) - 1):
                 merge = netaddr.spanning_cidr(cidrs[i:i+2])
                 if best is None or len(merge) < len(best):
-                    print "best updated from",best,"to",merge,"from",cidrs[i:i+2]
+                    print("best updated from",best,"to",merge,"from",cidrs[i:i+2])
                     best = merge
             union = union | best
-        print union
+        print(union)
         return Spec(len(union), union)
 
     def subset(self, l1, l2):

@@ -6,7 +6,7 @@ __email__ =  "kheradm2@illinois.edu"
 """
 
 from heapq import *
-from labeling import *
+from .labeling import *
 
 
 class HRegexElement(object):
@@ -83,7 +83,7 @@ class HRegexLabeling(Labeling):
         best = None
         while q:
             est, node, parent, cost = heappop(q)
-            if node in closed.keys():
+            if node in closed:
                 continue
             closed[node] = (cost, parent)
             #print "at", "{} ({})".format(est,cost), node, parent
@@ -127,7 +127,7 @@ class HRegexLabeling(Labeling):
                         cost, parent = closed[node]
 
                 ret.reverse()
-                print best_cost, best_cost**(-1.0/best[0])
+                print(best_cost, best_cost**(-1.0/best[0]))
                 ret = Spec((best_cost**(-1.0/best[0]))**self.d, HRegex(ret))
                 #print ret
                 return ret
@@ -162,7 +162,7 @@ class HRegexLabeling(Labeling):
                     # return l1_min_cost[ii] + l2_min_cost[jj]
 
                 def update(nei, add_c):
-                    if nei not in closed.keys():
+                    if nei not in closed:
                         g = cost * add_c
                         h = heuristic(nei)
                         heappush(q, (g * h, nei, node, g))
