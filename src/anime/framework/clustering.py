@@ -391,16 +391,29 @@ class HierarchicalClusteringWithIndex(HierarchicalClustering):
 
         index = RTreeIndex(feature)
 
+        logging.info("Indexing flows")
+
         for i in range(len(self.clusters)):
             index.insert(self.clusters[i], i)
 
-
+        logging.info("Finished indexing flows in %s seconds", time.time()-start)
 
         def get_closest_cluster(c):
             res = index.get_knn_approx(self.clusters[c])
             #res = index.get_knn_precise(self.clusters[c])
-            assert res[0][1] == c
-            return None if len(res) < 2 else res[1][1]
+
+            if len(res) < 2:
+                assert res[0][2][1] == c
+                return None
+            elif res[0][2][1] == c:
+                return res[1][2][1]
+            else:
+                logging.warning("The first item of nearest neighbors isn't the cluster itself %s", res)
+                assert res[1][2][1] == c
+                return res[0][2][1]
+
+            # assert res[0][2][1] == c
+            # return None if len(res) < 2 else res[1][2][1]
 
 
         for i in range(len(self.clusters)):
@@ -481,7 +494,7 @@ class HierarchicalClusteringWithIndex(HierarchicalClustering):
             remaining_clusters -= set(subsumed)
 
             for c in subsumed:
-                print("subsumed", self.clusters[c])
+                logging.info("subsumed %s", self.clusters[c])
                 self.parents[c] = new_cluster_id
 
             min_dist = None

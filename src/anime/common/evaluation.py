@@ -6,6 +6,8 @@ __email__ =  "kheradm2@illinois.edu"
 """
 
 import os
+import time
+import logging
 
 from anime.framework.labeling import *
 from anime.framework.ip_labeling import *
@@ -36,15 +38,17 @@ class IncrementalAtomCoverMapGenerator(object):
 
         self.lattice = MeetSemiLattice(self.feature)
 
-        print("creating meet semi-lattice from clusters")
+        start_time = time.time()
+        logging.info("creating meet semi-lattice from clusters")
         for c in self.clusters:
-            self.lattice.insert(c.value)
+           self.lattice.insert(c.value)
 
-        print("computing cardinality")
+        logging.info("lattice constructed in %s seconds", time.time() - start_time)
+        logging.info("computing cardinality")
         self.lattice.compute_all_cardinality()
 
-        print("finished creating lattice")
-        print("input size was", len(self.clusters), "output size is", len(self.lattice.get_all_nodes()))
+        logging.info("finished creating lattice in %s seconds", time.time() - start_time)
+        logging.info("input size was %s output size is", len(self.clusters), len(self.lattice.get_all_nodes()))
 
         with open(self.args.out + filename, 'w') as f:
             pickle.dump(self.lattice, f)
@@ -67,13 +71,13 @@ class IncrementalAtomCoverMapGenerator(object):
 
         for info in intent_info:
             k = info.k
-            print("k", k)
+            logging.info("k %s", k)
             new_intents = info.added
-            print("new_intents", new_intents)
+            logging.info("new_intents %s", new_intents)
             new_accepted = self.get_accepted(new_intents) - covered
-            print("new_accepted", new_accepted, len(new_accepted))
+            logging.info("new_accepted %s %s", new_accepted, len(new_accepted))
             covered |= new_accepted
-            print("covered", len(covered))
+            logging.info("covered %s", len(covered))
             cover_map[k] = new_accepted
 
         # with open(args.out + filename, 'w') as f:
@@ -92,7 +96,7 @@ class IncrementalAtomCoverMapGenerator(object):
             new_covered = sum([self.lattice.get_cardinality(n) for n in cover_map[k]])
             covered += new_covered
             res[k] = {"predicted_positive": covered}
-            print(k, res[k])
+            logging.info(k, res[k])
 
         return res
 
@@ -106,81 +110,74 @@ class IncrementalCoverMapGenerator(object):
         self.use_index = use_index
         self.index_sanity_check = False
 
-        if self.use_index:
-            import time
-            start_time = time.time()
-            print("Indexing flows")
-            self.index = RTreeIndex(self.feature, 2, 10)
-            for f in range(len(self.flows)):
-                key = self.feature.labeling.join(self.flows[f], self.flows[f])
-                self.index.insert(key, f)
-            print("Finished indexing flows in ", time.time() - start_time)
-
-    def get_new_accepted(self, new_intents, remaining):
-        if self.use_index and self.index_sanity_check:
-            return self._get_new_accepted_with_sanity_check(new_intents, remaining)
-
+    def _get_new_accepted_index(self,new_intents):
         ret = []
-        if self.use_index:
-            for i in new_intents:
-                new = [x for _, x in self.index.get_subsets(self.clusters[i])]
-                ret += new
-                # note than len(ret) can be indeed zero
-                self.index.remove_subset(self.clusters[i])
-        else:
-            for f in remaining:
-                accepted = False
-                for i in new_intents:
-                    if self.feature.labeling.subset(self.flows[f], self.clusters[i].value):
-                        accepted = True
-                        break
-                # print "checking", f, self.flows[f], accepted
-                if accepted:
-                    ret.append(f)
+        for i in new_intents:
+            new = [x for _, x in self.index.get_subsets(self.clusters[i])]
+            ret += new
+            # note than len(ret) can be indeed zero
+            self.index.remove_subset(self.clusters[i])
         return ret
 
-
-    def _get_new_accepted_with_sanity_check(self, new_intents, remaining):
-        ret1 = []
-        ret2 = []
-
-        for i in new_intents:
-            new = [x for _,x in self.index.get_subsets(self.clusters[i])]
-            ret1 += new
-            self.index.remove_subset(self.clusters[i])
-
+    def _get_new_accepted_no_index(self, new_intents, remaining):
+        ret = []
         for f in remaining:
             accepted = False
             for i in new_intents:
                 if self.feature.labeling.subset(self.flows[f], self.clusters[i].value):
                     accepted = True
                     break
+            # print "checking", f, self.flows[f], accepted
             if accepted:
-                ret2.append(f)
+                ret.append(f)
+        return ret
 
-        assert set(ret1) == set(ret2)
-        return ret1
+    def _get_new_accepted_with_sanity_check(self, new_intents, remaining):
+        logging.warning("Running sanity check on get new accepted with index")
+        index_res = self._get_new_accepted_index(new_intents)
+        no_index_res = self._get_new_accepted_no_index(new_intents, remaining)
+        assert set(index_res) == set(no_index_res)
+
+        return no_index_res
+
+    def get_new_accepted(self, new_intents, remaining):
+        if self.use_index and self.index_sanity_check:
+            return self._get_new_accepted_with_sanity_check(new_intents, remaining)
+
+        if self.use_index:
+            return self._get_new_accepted_index(new_intents)
+        else:
+            return self._get_new_accepted_no_index(new_intents, remaining)
 
     def get_cover_map(self, intent_info, args):
         filename = "/%s_cover_map.pk" % self.name
         if os.path.exists(args.out + filename):
+            logging.info("%s exists, loading it from file", filename)
             with open(args.out + filename) as f:
                 cover_map = pickle.load(f)
             return cover_map
 
+        if self.use_index:
+            start_time = time.time()
+            logging.info("Indexing flows")
+            self.index = RTreeIndex(self.feature, 2, 10)
+            for f in range(len(self.flows)):
+                key = self.feature.labeling.join(self.flows[f], self.flows[f])
+                self.index.insert(key, f)
+            logging.info("Finished indexing flows in %s seconds", time.time() - start_time)
 
         remaining = set(range(len(self.flows)))
         cover_map = {}
 
         for info in intent_info:
             k = info.k
-            print("k", k)
+            logging.info("k %s", k)
             new_intents = info.added
-            print("new_intents", new_intents)
+            logging.info("new_intents %s", new_intents)
             new_accepted = self.get_new_accepted(new_intents, remaining)
             remaining -= set(new_accepted)
-            print("new_accepted", new_accepted, len(new_accepted))
-            print("remaining len", len(remaining))
+            logging.info("new_accepted %s %s", new_accepted, len(new_accepted))
+            logging.info("remaining len %s", len(remaining))
             cover_map[k] = new_accepted
 
 
@@ -213,7 +210,7 @@ class IncrementalCostBasedEvaluator(object):
             card_sum += sum([self.feature.labeling.cardinality(self.clusters[c].value) for c in info.added]) - \
                         sum([self.feature.labeling.cardinality(self.clusters[c].value) for c in info.removed])
             res[k] = {"tp": tp, "cost": original_cost, "cardinality_sum": card_sum}
-            print(k, res[k])
+            logging.info(k, res[k])
 
         return res
 
@@ -251,7 +248,7 @@ class IncrementalSampleBasedEvaluator(object):
             fn -= p_new_covered
 
             res[k] = {"tp": tp, "fp": fp, "tn": tn, "fn": fn}
-            print(k, res[k])
+            logging.info(k, res[k])
 
         return res
 

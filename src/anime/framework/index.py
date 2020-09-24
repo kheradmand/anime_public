@@ -16,6 +16,9 @@ class Index(object):
     def get_subsets(self, key):
         assert False
 
+    def remove_subset(self, key):
+        assert False
+
 
 class RtreeIndexNode:
     def __init__(self, bounding_box):
@@ -49,11 +52,12 @@ class RTreeIndex(Index):
 
     def remove_subset(self, key):
         original_covered = self.root.covered_approx
-        self._remove_subset(key, self.root)
-        if len(self.root.objects) == 0:
-            top = self.feature.labeling.top()
-            self.root.bounding_box = Spec(self.feature.labeling.cost(top), top)
-            self.root.is_leaf =  True
+        if len(self.root.objects) > 0:
+            self._remove_subset(key, self.root)
+            if len(self.root.objects) == 0:
+                top = self.feature.labeling.top()
+                self.root.bounding_box = Spec(self.feature.labeling.cost(top), top)
+                self.root.is_leaf =  True
         #self._sanity_check(self.root)
         return original_covered - self.root.covered_approx
 
@@ -227,7 +231,7 @@ class RTreeIndex(Index):
             for i in range(l):
                 spec = self.feature.labeling.join(n.objects[i].bounding_box.value, key.value)
                 diff = spec.cost - n.objects[i].bounding_box.cost
-                if best is None or diff < best[0] or (diff - best[0] < 1e-10 and spec.cost < best[1].cost):
+                if best is None or diff < best[0] or (abs(diff - best[0]) < 1e-10 and spec.cost < best[1].cost):
                     best = (diff, spec, i)
 
             assert best is not None
@@ -333,7 +337,8 @@ class RTreeIndex(Index):
         heapq.heappush(heap, entry)
         ret = []
         while len(heap) > 0 and len(ret) < k:
-            dist,joined,obj = heapq.heappop(heap)
+            entry = heapq.heappop(heap)
+            dist, joined, obj = entry
             #print dist, joined, obj, len(heap), len(ret)
 
             if isinstance(obj, RtreeIndexNode):
@@ -343,7 +348,9 @@ class RTreeIndex(Index):
                     dist = joined.cost - bb.cost - key.cost
                     heapq.heappush(heap, (dist, joined, o))
             else:
-                ret.append(obj)
+                # ret.append(obj)
+                ret.append(entry)
+
 
         return ret
 
@@ -357,7 +364,8 @@ class RTreeIndex(Index):
             heap.append((dist, joined, e))
 
         heap = sorted(heap)
-        return [obj for _, _, obj in heap[:k]]
+        # return [obj for _, _, obj in heap[:k]]
+        return heap[:k]
 
 
 
