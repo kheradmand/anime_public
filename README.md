@@ -15,4 +15,4 @@ You may also learn about the latest developments, including optimizations and us
 
 ### Using Anime
 
-You first need to encode your forwarding behavior in form of a list of features. For example (dstIP, src, dst). You also need to create appropriate feature types (called labeling in the code) and their instantiations. You can then pass the the behavior and the features to the clustering algorithm to infer intents. Checkout [experiments/hre-cli/hre_cli.py](experiments/hre-cli/hre_cli.py) for an example usage of the framework. Anime is also being reimplemented in C++. Checkout [cpp/cites.cpp](cpp/cites.cpp) for an example. 
+You first need to encode your forwarding behavior in form of a list of features. For example (dstIP, src, dst). You also need to create appropriate feature types (called labeling in the code) and their instantiations. You can then pass the the behavior and the features to the clustering algorithm to infer intents. Checkout [experiments/hre-cli/hre_cli.py](experiments/hre-cli/hre_cli.py) for an example usage of the framework. Anime is also being reimplemented in C++. Checkout [cpp/cites.cpp](cpp/cites.cpp) as an example. 
