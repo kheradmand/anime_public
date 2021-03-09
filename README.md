@@ -8,9 +8,6 @@ You can checkout the following resource for more information about the work:
     - [slides](http://kheradmand.web.illinois.edu/slides/Anime_SOSR20_final.pdf)
     - [presentation](https://www.youtube.com/watch?v=slDamPr_l8E&feature=youtu.be)
     
-You may also learn about the latest developments, including optimizations and use of the tool for anomaly detection through the following technical report:
-- A Framework for Mining High-Level Intents from Low-Level Network Behavior
-    - [working draft](http://kheradmand.web.illinois.edu/papers/Anime-working-draft-Oct2-2020.pdf)
 
 
 ### Using Anime
