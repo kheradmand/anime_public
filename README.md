@@ -3,6 +3,8 @@
 Anime is a framework and a prototype tool to infer high-level networking intents by mining the comonality among low-level forwarding behavior.
 
 You can checkout the following resource for more information about the work:
+- A Framework for Mining High-Level Intents from Low-Level Network Behavior (draft)
+    - [paper](https://kheradmand.web.illinois.edu/papers/Anime_draft_june21.pdf)
 - Automatic Inference of High-Level Network Intents by Mining Forwarding Patterns (SOSR'20)
     - [paper](http://kheradmand.web.illinois.edu/papers/anime-sosr20.pdf)
     - [slides](http://kheradmand.web.illinois.edu/slides/Anime_SOSR20_final.pdf)
